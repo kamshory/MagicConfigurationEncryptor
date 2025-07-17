@@ -62,6 +62,7 @@ sessions</textarea>
 
 </div>
 <div>
+  <button onclick="generatePlaceholder()">Generate Placeholder Only</button>
   <button onclick="encryptYaml()">Encrypt</button>
   <button onclick="encryptYamlEnv()">Encrypt with Environment Placeholder</button>
   <button onclick="decryptYaml()">Decrypt</button>
@@ -87,8 +88,12 @@ function generateRandomHex32() {
   return hex;
 }
 
-function encryptValue(value, key, iv) {
+function encryptValue(value, key, iv, skipEncrypt = false) {
   const plaintext = value.toString();
+  if(skipEncrypt)
+  {
+    return plaintext;
+  }
   const encrypted = CryptoJS.AES.encrypt(plaintext, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
   return encrypted.toString();
 }
@@ -117,17 +122,17 @@ function encryptObject(obj, key, iv) {
   return obj;
 }
 
-function encryptObjectEnv(obj, key, iv, prefix, mapping) {
+function encryptObjectEnv(obj, key, iv, prefix, mapping, skipEncrypt = false) {
   if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
     const envName = `SEC_${prefix.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`;
-    mapping[envName] = encryptValue(obj, key, iv);
+    mapping[envName] = encryptValue(obj, key, iv, skipEncrypt);
     return `\${${envName}}`;
   } else if (Array.isArray(obj)) {
-    return obj.map((item, idx) => encryptObjectEnv(item, key, iv, `${prefix}_${idx}`, mapping));
+    return obj.map((item, idx) => encryptObjectEnv(item, key, iv, `${prefix}_${idx}`, mapping, skipEncrypt));
   } else if (typeof obj === 'object' && obj !== null) {
     const result = {};
     for (let k in obj) {
-      result[k] = encryptObjectEnv(obj[k], key, iv, `${prefix}_${k}`, mapping);
+      result[k] = encryptObjectEnv(obj[k], key, iv, `${prefix}_${k}`, mapping, skipEncrypt);
     }
     return result;
   }
@@ -243,6 +248,36 @@ function decryptYaml() {
     document.getElementById('output').value = 'Error: ' + e.message;
   }
 }
+
+function generatePlaceholder() {
+  const input = document.getElementById('yamlInput').value;
+  const { key, iv } = getKeyAndIv();
+  const props = getPropertiesToProcess();
+  const osType = document.getElementById('osSelect').value;
+  const envMapping = {};
+  try {
+    const data = jsyaml.load(input);
+    for (let prop of props) {
+      const keys = prop.split('.');
+      let ref = data;
+      for (let i = 0; i < keys.length - 1; i++) {
+        ref = ref[keys[i]];
+        if (!ref) break;
+      }
+      const last = keys[keys.length - 1];
+      if (ref && ref[last] !== undefined) {
+        ref[last] = encryptObjectEnv(ref[last], key, iv, prop, envMapping, true);
+      }
+    }
+    const output = jsyaml.dump(data, { lineWidth: 160 });
+    document.getElementById('output').value = output;
+    document.getElementById('envMapping').value = Object.entries(envMapping).map(([k, v]) => `${k}=${v}`).join('\n');
+    document.getElementById('envScript').value = generateEnvScript(envMapping, osType);
+  } catch (e) {
+    document.getElementById('output').value = 'Error: ' + e.message;
+  }
+}
+
 </script>
 
 </body>
