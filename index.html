@@ -1,284 +1,69 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>YAML Encrypt/Decrypt</title>
-  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    textarea { width: 100%; height: 200px; font-family: monospace; }
-    button { margin: 10px 0; }
-    .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .section { display: flex; flex-direction: column; }
-    label { font-weight: bold; margin-top: 10px; }
-
-  </style>
+  <script src="js/js-yaml.min.js"></script>
+  <script src="js/crypto-js.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
 
-<h2>YAML Encrypt / Decrypt</h2>
-
-
-<div class="container">
-  <div class="section">
-    <label>YAML Input:</label>
-    <textarea id="yamlInput"></textarea>
+  <h2>YAML Encrypt / Decrypt</h2>
+  
+  <div class="container">
+    <div class="section">
+      <div class="label">YAML Input</div>
+      <textarea id="yamlInput" spellcheck="false"></textarea>
+    </div>
+    <div class="section">
+      <div class="label">Output</div>
+      <textarea id="yamlOutput" spellcheck="false"></textarea>
+    </div>
   </div>
-  <div class="section">
-    <label>Output:</label>
-    <textarea id="output"></textarea>
+
+  <div class="container">
+    <div class="section">
+      <div class="label">Environment Variables Mapping</div>
+      <textarea id="envMapping" readonly spellcheck="false"></textarea>
+    </div>
+    <div class="section">
+      <div class="label">Environment Script</div>
+      <textarea id="envScript" readonly spellcheck="false"></textarea>
+    </div>
   </div>
-</div>
 
-<div class="container">
-  <div class="section">
-    <label>Environment Variables Mapping:</label>
-    <textarea id="envMapping" readonly></textarea>
+  <div class="properties">
+    <div class="label">Properties to Encrypt/Decrypt</div>
+    <textarea id="propsInput" spellcheck="false"></textarea>
   </div>
-  <div class="section">
-    <label>Environment Script:</label>
-    <textarea id="envScript" readonly></textarea>
+
+  <div class="properties">
+    <div class="label">Operating System</div>
+    <select id="osSelect">
+      <option value="linux">Linux / macOS (export)</option>
+      <option value="windows">Windows (set)</option>
+    </select>
   </div>
-</div>
 
-<div>
-  <label>Properties to Encrypt/Decrypt (one per line):</label>
-  <textarea id="propsInput">database
-sessions</textarea>
-</div>
+  <div class="properties">
+    <div class="label">Encryption Key</div>
+    <input type="text" id="keyInput" minlength="32" maxlength="32">
+    <button onclick="document.querySelector('#keyInput').value = generateRandomHex32()">Generate</button>
+  </div>
+  <div class="properties">
+    <button onclick="generatePlaceholder()">Generate Placeholder</button>
+    <button onclick="encryptYamlEnv()">Encrypt + Generate Placeholder</button>
+    <button onclick="encryptYaml()">Encrypt</button>
+    <button onclick="decryptYaml()">Decrypt</button>
+  </div>
 
-<div>
-  <label>System:</label>
-  <select id="osSelect">
-    <option value="linux">Linux / macOS (export)</option>
-    <option value="windows">Windows (set)</option>
-  </select>
-</div>
+  <script src="js/script.js">
 
-<div>
-    <label>Encryption Key (32 hex chars):</label>
-<input type="text" id="keyInput">  <button onclick="document.querySelector('#keyInput').value = generateRandomHex32()">Generate Random Key</button>
-
-</div>
-<div>
-  <button onclick="generatePlaceholder()">Generate Placeholder Only</button>
-  <button onclick="encryptYaml()">Encrypt</button>
-  <button onclick="encryptYamlEnv()">Encrypt with Environment Placeholder</button>
-  <button onclick="decryptYaml()">Decrypt</button>
-</div>
-
-<script>
-function getKeyAndIv() {
-  const hexKey = document.getElementById('keyInput').value.trim();
-  if (!/^[0-9a-fA-F]{32}$/.test(hexKey)) {
-    alert('Key must be 32 hexadecimal characters (16 bytes).');
-    throw new Error('Invalid key');
-  }
-  const key = CryptoJS.enc.Hex.parse(hexKey);
-  const iv = CryptoJS.enc.Hex.parse('00000000000000000000000000000000');
-  return { key, iv };
-}
-
-function generateRandomHex32() {
-  let hex = '';
-  for (let i = 0; i < 32; i++) {
-    hex += Math.floor(Math.random() * 16).toString(16);
-  }
-  return hex;
-}
-
-function encryptValue(value, key, iv, skipEncrypt = false) {
-  const plaintext = value.toString();
-  if(skipEncrypt)
-  {
-    return plaintext;
-  }
-  const encrypted = CryptoJS.AES.encrypt(plaintext, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-  return encrypted.toString();
-}
-
-function decryptValue(value, key, iv) {
-  try {
-    const decrypted = CryptoJS.AES.decrypt(value, key, { iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
-    return decrypted.toString(CryptoJS.enc.Utf8);
-  } catch (e) {
-    return value;
-  }
-}
-
-function encryptObject(obj, key, iv) {
-  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
-    return encryptValue(obj, key, iv);
-  } else if (Array.isArray(obj)) {
-    return obj.map(item => encryptObject(item, key, iv));
-  } else if (typeof obj === 'object' && obj !== null) {
-    const result = {};
-    for (let k in obj) {
-      result[k] = encryptObject(obj[k], key, iv);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function encryptObjectEnv(obj, key, iv, prefix, mapping, skipEncrypt = false) {
-  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
-    const envName = `SEC_${prefix.replace(/[^A-Za-z0-9_]/g, '_').toUpperCase()}`;
-    mapping[envName] = encryptValue(obj, key, iv, skipEncrypt);
-    return `\${${envName}}`;
-  } else if (Array.isArray(obj)) {
-    return obj.map((item, idx) => encryptObjectEnv(item, key, iv, `${prefix}_${idx}`, mapping, skipEncrypt));
-  } else if (typeof obj === 'object' && obj !== null) {
-    const result = {};
-    for (let k in obj) {
-      result[k] = encryptObjectEnv(obj[k], key, iv, `${prefix}_${k}`, mapping, skipEncrypt);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function decryptObject(obj, key, iv) {
-  if (typeof obj === 'string') {
-    const decrypted = decryptValue(obj, key, iv);
-    return decrypted !== '' ? decrypted : obj;
-  } else if (Array.isArray(obj)) {
-    return obj.map(item => decryptObject(item, key, iv));
-  } else if (typeof obj === 'object' && obj !== null) {
-    const result = {};
-    for (let k in obj) {
-      result[k] = decryptObject(obj[k], key, iv);
-    }
-    return result;
-  }
-  return obj;
-}
-
-function getPropertiesToProcess() {
-  return document.getElementById('propsInput').value
-    .split('\n')
-    .map(p => p.trim())
-    .filter(p => p !== '');
-}
-
-function encryptYaml() {
-  const input = document.getElementById('yamlInput').value;
-  const { key, iv } = getKeyAndIv();
-  const props = getPropertiesToProcess();
-  try {
-    const data = jsyaml.load(input);
-    for (let prop of props) {
-      const keys = prop.split('.');
-      let ref = data;
-      for (let i = 0; i < keys.length - 1; i++) {
-        ref = ref[keys[i]];
-        if (!ref) break;
-      }
-      const last = keys[keys.length - 1];
-      if (ref && ref[last] !== undefined) {
-        ref[last] = encryptObject(ref[last], key, iv);
-      }
-    }
-    const output = jsyaml.dump(data, { lineWidth: 160 });
-    document.getElementById('output').value = output;
-  } catch (e) {
-    document.getElementById('output').value = 'Error: ' + e.message;
-  }
-}
-
-function encryptYamlEnv() {
-  const input = document.getElementById('yamlInput').value;
-  const { key, iv } = getKeyAndIv();
-  const props = getPropertiesToProcess();
-  const osType = document.getElementById('osSelect').value;
-  const envMapping = {};
-  try {
-    const data = jsyaml.load(input);
-    for (let prop of props) {
-      const keys = prop.split('.');
-      let ref = data;
-      for (let i = 0; i < keys.length - 1; i++) {
-        ref = ref[keys[i]];
-        if (!ref) break;
-      }
-      const last = keys[keys.length - 1];
-      if (ref && ref[last] !== undefined) {
-        ref[last] = encryptObjectEnv(ref[last], key, iv, prop, envMapping);
-      }
-    }
-    const output = jsyaml.dump(data, { lineWidth: 160 });
-    document.getElementById('output').value = output;
-    document.getElementById('envMapping').value = Object.entries(envMapping).map(([k, v]) => `${k}=${v}`).join('\n');
-    document.getElementById('envScript').value = generateEnvScript(envMapping, osType);
-  } catch (e) {
-    document.getElementById('output').value = 'Error: ' + e.message;
-  }
-}
-
-function generateEnvScript(mapping, os) {
-  if (os === 'windows') {
-    return Object.entries(mapping).map(([k, v]) => `setx ${k} "${v}"`).join('\n');
-  } else {
-    return Object.entries(mapping).map(([k, v]) => `export ${k}="${v}"`).join('\n');
-  }
-}
-
-function decryptYaml() {
-  const input = document.getElementById('yamlInput').value;
-  const { key, iv } = getKeyAndIv();
-  const props = getPropertiesToProcess();
-  try {
-    const data = jsyaml.load(input);
-    for (let prop of props) {
-      const keys = prop.split('.');
-      let ref = data;
-      for (let i = 0; i < keys.length - 1; i++) {
-        ref = ref[keys[i]];
-        if (!ref) break;
-      }
-      const last = keys[keys.length - 1];
-      if (ref && ref[last] !== undefined) {
-        ref[last] = decryptObject(ref[last], key, iv);
-      }
-    }
-    const output = jsyaml.dump(data, { lineWidth: 160 });
-    document.getElementById('output').value = output;
-  } catch (e) {
-    document.getElementById('output').value = 'Error: ' + e.message;
-  }
-}
-
-function generatePlaceholder() {
-  const input = document.getElementById('yamlInput').value;
-  const { key, iv } = getKeyAndIv();
-  const props = getPropertiesToProcess();
-  const osType = document.getElementById('osSelect').value;
-  const envMapping = {};
-  try {
-    const data = jsyaml.load(input);
-    for (let prop of props) {
-      const keys = prop.split('.');
-      let ref = data;
-      for (let i = 0; i < keys.length - 1; i++) {
-        ref = ref[keys[i]];
-        if (!ref) break;
-      }
-      const last = keys[keys.length - 1];
-      if (ref && ref[last] !== undefined) {
-        ref[last] = encryptObjectEnv(ref[last], key, iv, prop, envMapping, true);
-      }
-    }
-    const output = jsyaml.dump(data, { lineWidth: 160 });
-    document.getElementById('output').value = output;
-    document.getElementById('envMapping').value = Object.entries(envMapping).map(([k, v]) => `${k}=${v}`).join('\n');
-    document.getElementById('envScript').value = generateEnvScript(envMapping, osType);
-  } catch (e) {
-    document.getElementById('output').value = 'Error: ' + e.message;
-  }
-}
-
-</script>
+  </script>
 
 </body>
+
 </html>
